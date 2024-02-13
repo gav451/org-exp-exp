@@ -1,0 +1,268 @@
+#+title: Bug engraved
+#+author: Gerard Vermeulen
+#+latex_class: article
+#+latex_class_options: [11pt,a4paper,english,svgnames]
+#+options: ^:{} date:nil toc:2 timestamp:nil
+#+startup: showeverything
+#+property: header-args:emacs-lisp :tangle bug-engraved.el
+#+begin_src latex :noweb yes :results raw
+  ,#+latex_header: <<lst:latex-header>>
+#+end_src
+
+* Introduction
+:PROPERTIES:
+:CUSTOM_ID: sec:introduction
+:END:
+
+Execution of the entry point listing [[be-do-it]] assumes tangling of this file to
+[[./bug-engraved.el]] and evaluation of [[./bug-engraved.el]] or installation of
+[[./bug-engraved.el]] by means of ~package-install-from-buffer~.
+
+Adding text here makes section [[#sec:defects-summary]] a moving target.
+
+* LaTeX preamble with page layout and float barriers
+:PROPERTIES:
+:CUSTOM_ID: sec:latex-preamble
+:END:
+
+The geometry in listing [[lst:latex-header]] makes that the line length of all
+listings fits within the LaTeX length ~\textwidth~.  Listing [[lst:latex-header]]
+also introduces float barriers to prevent floating figures and listings from
+floating outside their ~[sub-][sub-]sections~.  This document shows that LaTeX
+fails to place more than three floating listings on a page, even though space
+allows it (see section [[#sec:bug-engraved-usage]] in the ~pdf~).
+
+#+caption[LaTeX preamble with page layout and float barriers]:
+#+caption: LaTeX preamble with page layout and float barriers.
+#+name: lst:latex-header
+#+begin_src latex -n :exports code
+  % BEGIN: lst:latex-header
+  \usepackage{biblatex} % LaTeX compilation fails without this package.
+  % PAGE LAYOUT: https://www.overleaf.com/learn/latex/Page_size_and_margins
+  \usepackage{geometry}
+  \usepackage{layout}
+  \geometry{
+    a4paper,
+    total={480pt,680pt},
+    top=60pt,
+    left=60pt,
+  }
+  % FLOAT BARRIERS:
+  % https://tex.stackexchange.com/questions/118662/use-placeins-for-subsections
+  % Make section an implicit float barrier:
+  \usepackage[section]{placeins}
+  % Make subsection an implicit float barrier:
+  \makeatletter
+  \AtBeginDocument{%
+    \expandafter\renewcommand\expandafter\subsection\expandafter{%
+      \expandafter\@fb@secFB\subsection
+    }%
+  }
+  \makeatother
+  % Make subsubsection an implicit float barrier:
+  \makeatletter
+  \AtBeginDocument{%
+    \expandafter\renewcommand\expandafter\subsubsection\expandafter{%
+      \expandafter\@fb@secFB\subsubsection
+    }%
+  }
+  % END: lst:latex-header
+#+end_src
+
+* Source blocks with code for ~bug-engraved~
+:PROPERTIES:
+:CUSTOM_ID: sec:bug-engraved-code
+:END:
+
+#+caption: Library file header.
+#+name: be-header
+#+begin_src emacs-lisp -n :eval never
+  ;;; bug-engraved.el --- demonstrate engraved bug -*- lexical-binding:t -*-
+
+  ;; Author: Gerard Vermeulen <gerard.vermeulen@posteo.net>
+  ;; Version: 0.0.1
+
+  ;; This program is free software; you can redistribute it and/or modify
+  ;; it under the terms of the GNU General Public License as published by
+  ;; the Free Software Foundation, either version 3 of the License, or
+  ;; (at your option) any later version.
+
+  ;; This program is distributed in the hope that it will be useful,
+  ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ;; GNU General Public License for more details.
+
+  ;; You should have received a copy of the GNU General Public License
+  ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+  ;;; Commentary:
+
+  ;; This file is the tangled output of `bug-engraved.org' tailored for
+  ;; use with `bug-engraved.el'.  Users should go to the "Export to
+  ;; LaTeX" section of `bug-engraved.org' and execute the `be-do-it'
+  ;; source block after evaluation or installation of `bug-engraved.el'.
+
+  ;;; Code:
+
+  (require 'ox-latex)
+#+end_src
+
+#+caption[Define ~be-org-latex-engrave-source-block-filter~]:
+#+caption: Define a source block filter function.
+#+name: be-filter
+#+begin_src emacs-lisp -n :results silent
+  (defun be-org-latex-engraved-source-block-filter (data _backend _info)
+    "Replace \"Code\" with \"Breakable\" in non-floating DATA environments.
+
+  Set `org-latex-engraved-preamble' to define a Breakable (non-floating)
+  environment and an unbreakable Code (floating) environment."
+    (unless (string-match "^\\\\DeclareTColorBox\\[\\]{Breakable}"
+                          org-latex-engraved-preamble)
+      (user-error
+       "`org-latex-engraved-preamble' defines no `Breakable' environment"))
+    (when (eq org-latex-src-block-backend 'engraved)
+      ;; Transform only blocks matching at position 0.  Therefore, do
+      ;; not transform blocks that are listing environments.
+      (when (string-match "\\`\\\\begin{Code}\n" data)
+        (setq data (replace-match "\\begin{Breakable}\n" t 'literal data))
+        (if (string-match "^\\\\end{Code}\n" data)
+            (setq data (replace-match "\\end{Breakable}\n" t 'literal data))
+          (error "Match `^\\\\end{Code}' failure")))))
+#+end_src
+
+#+caption[Define ~be-setup~]:
+#+caption: Define ~be-setup~.
+#+caption: Line *37* will format to ~unbreakable~ or ~breakable~.
+#+name: be-setup
+#+begin_src emacs-lisp -n :results silent
+  (defun be-setup (how)
+    (if (eq how 'plain-engraved)
+        (progn (setq-local org-latex-engraved-preamble
+                           (default-toplevel-value 'org-latex-engraved-preamble))
+               (setq-local org-export-filter-src-block-functions nil))
+      (setq-local org-latex-engraved-preamble
+                  (format "\\usepackage{fvextra}
+  [FVEXTRA-SETUP]
+  %% Make code and line numbers normalsize. Make line numbers grey.
+  \\renewcommand\\theFancyVerbLine{
+    \\normalsize\\color{black!40!white}\\arabic{FancyVerbLine}}
+  %% Do not rely on an eventual call to `engrave-faces-latex-gen-preamble'.
+  \\usepackage{xcolor}
+  \\providecolor{EfD}{HTML}{f7f7f7}
+  \\providecolor{EFD}{HTML}{28292e}
+  %% Define a breakable Code environment to prettily wrap the fontified code.
+  \\usepackage[breakable,xparse]{tcolorbox}
+  \\DeclareTColorBox[]{Breakable}{o}{
+    colback=EfD, colframe=EFD, colupper=EFD,
+    fontupper=\\normalsize\\setlength{\\fboxsep}{0pt},
+    IfNoValueTF={#1}{
+      boxsep=2pt, arc=2.5pt, outer arc=2.5pt, boxrule=1.0pt
+    }{
+      boxsep=2.5pt, arc=0pt, outer arc=0pt, boxrule=0pt, leftrule=1.5pt
+    },
+    left=2pt, right=2pt, top=1pt, bottom=0.5pt, breakable
+  }
+  %% Define an unbreakable Code environment to fontify code inside floats.
+  \\DeclareTColorBox[]{Code}{o}{
+    colback=EfD, colframe=EFD, colupper=EFD,
+    fontupper=\\normalsize\\setlength{\\fboxsep}{0pt},
+    IfNoValueTF={#1}{
+      boxsep=2pt, arc=2.5pt, outer arc=2.5pt, boxrule=1.0pt
+    }{
+      boxsep=2.5pt, arc=0pt, outer arc=0pt, boxrule=0pt, leftrule=1pt
+    },
+    left=2pt, right=2pt, top=1pt, bottom=1pt, %s
+  }
+  [LISTINGS-SETUP]" (or (and (eq how 'fixed-engraved) "unbreakable")
+                        (and (eq how 'boxed-engraved) "breakable")
+                        (user-error "(be-setup `%S') yells BOOM!" how))))
+      (setq-local org-export-filter-src-block-functions
+                  '(be-org-latex-engraved-source-block-filter)))
+    (setq-local org-latex-toc-command
+                "\\tableofcontents\\label{toc}\n\\listoflistings\n\\newpage\n")
+    (setq-local org-latex-src-block-backend 'engraved))
+#+end_src
+
+#+caption[Define ~be-select-how-and-export-to-latex~]:
+#+caption: Define ~be-select-how-and-export-to-latex~.
+#+name: defun-be-do-it
+#+begin_src emacs-lisp -n :exports code :results silent
+  ;;;###autoload
+  (defun be-select-how-and-export-to-latex ()
+    "Export Org buffer to LaTeX file after prompting how to export.
+
+  The `engraved' source block export backend may lead to defects in
+  compiled `pdf' for floating listings where vertical line spacing may not
+  be constant.  Option `plain-engraved' selects Org upstream, option
+  `fixed-engraved' selects a bug work-around, and option `boxed-engraved'
+  selects a bug amplification which may lead to terrible `pdf' output."
+    (interactive)
+    (let ((how
+           (intern-soft
+            (completing-read
+             "How: " '(plain-engraved fixed-engraved boxed-engraved) nil t)))
+          (seconds 1))
+      (be-setup how)
+      (run-with-timer seconds nil #'org-latex-export-to-latex)
+      how))
+#+end_src
+
+#+caption: Library file footer.
+#+name: be
+#+begin_src emacs-lisp -n :eval never
+  (provide 'bug-engraved)
+
+  ;;; bug-engraved.el ends here
+#+end_src
+
+* Export to LaTeX
+:PROPERTIES:
+:CUSTOM_ID: sec:bug-engraved-usage
+:END:
+
+#+caption[Call ~be-select-what-and-export-to-latex~]:
+#+caption: Call ~be-select-what-and-export-to-latex~.
+#+header: :wrap "src emacs-lisp -n :eval never :tangle no"
+#+name: be-do-it
+#+begin_src emacs-lisp -n :exports both: :tangle no
+  (unless (or (featurep 'bug-engraved)
+              (require 'bug-engraved nil 'noerror))
+    (user-error "Evaluate or install `bug-engraved.el' (after tangling?)"))
+  (be-select-how-and-export-to-latex)
+#+end_src
+
+#+caption[Call ~be-select-what-and-export-to-latex~ result]:
+#+caption: Call ~be-select-what-and-export-to-latex~ result.
+#+name: be-do-it-result
+#+RESULTS: be-do-it
+#+begin_src emacs-lisp -n :eval never :tangle no
+boxed-engraved
+#+end_src
+
+* Summary of defects
+:PROPERTIES:
+:CUSTOM_ID: sec:defects-summary
+:END:
+
+In case of `plain-engraved', I see on my system for floating listings
+(non-floating listings are always OK) too much vertical spacing in
+- listing [[be-header]] after line 5, 10, 15, 20, and 25.
+- listing [[be-filter]] after line 5, 10, and 15.
+- listing [[be-setup]] after line 5, 10, 15, 20, 25, 30, 35, 40, and 45.
+- listing [[defun-be-do-it]] after line 5, 10, and 15.
+In case of `boxed-engraved', I see on my system that the ~pdf~ layout of listing
+[[be-header]] is *super-weird*.  Furthermore, I see for floating listings too much
+vertical spacing in:
+- listing [[be-filter]] after line 8, and 16.
+- listing [[be-setup]] after line 8, 16, 24, 32, and 40.
+- listing [[defun-be-do-it]] after line 8, and 16.
+In case of `fixed-engraved', the ~pdf~ output is without defects although the
+values of `org-latex-engraved-preamble' for `boxed-engraved' and
+`fixed-engraved' differ by one single replacement of the word "breakable" (is
+`boxed-engraved') by "unbreakable" (is `fixed-engraved'), see listing [[be-setup]].
+
+# Local Variables:
+# compile-command: "latexmk -interaction=nonstopmode -lualatex -pvc -shell-escape bug-engraved.tex"
+# fill-column: 80
+# org-edit-src-content-indentation: 2
+# End:

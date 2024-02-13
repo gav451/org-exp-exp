@@ -1,0 +1,662 @@
+#+title: Switch to any Org LaTeX source block export backend
+#+author: Gerard Vermeulen
+#+latex-class: article
+#+latex_class_options: [11pt,a4paper,english,svgnames]
+#+property: header-args:emacs-lisp :tangle any-backend.el
+#+options: ^:{} date:nil toc:2 timestamp:nil
+#+startup: showeverything
+#+begin_src latex :noweb yes :results raw
+  ,#+latex_header: <<lst:latex-header>>
+#+end_src
+
+* Introduction
+:PROPERTIES:
+:CUSTOM_ID: sec:introduction
+:END:
+
+This document demonstrates how to switch between the four different Org LaTeX
+export source code block backends ~verbatim~, ~listings~, ~minted~ and
+~engraved~.  In order to explore a bug in the ~engraved~ backend, the
+sub-backends ~plain-engraved~, ~fixed-engraved~, and ~boxed-engraved~ replace
+the ~engraved~ backend in the entry point [[ab-do-it]].
+
+Sub-backend ~plain-engraved~ selects Org upstream, sub-backend ~fixed-engraved~
+selects a bug work-around, and sub-backend ~boxed-engraved~ selects a bug
+amplification which may lead to terrible ~pdf~ output.
+
+Execution of the entry point listing [[ab-do-it]] assumes tangling of this file to
+[[./any-backend.el]] and evaluation of [[./any-backend.el]] or installation of
+[[./any-backend.el]] by means of ~package-install-from-buffer~.
+
+* Minimal setup                                                    :noexport:
+:PROPERTIES:
+:CUSTOM_ID: sec:minimal-setup
+:END:
+
+Listing [[lst:insert-init]] uses ~ab-org-babel-file-as-block-body~ to insert the
+contents of [[~/org-emacs/init.el][~/org-emacs/init.el]] into listing [[lst:insert-init-result]].
+
+#+caption[Insert minimal dot-emacs]:
+#+caption: Insert minimal dot-emacs.
+#+header: :wrap "src emacs-lisp -n :eval never :tangle no"
+#+name: lst:insert-init
+#+header: :var filename="~/org-emacs/init.el"
+#+begin_src emacs-lisp -n :eval no-export :exports both :tangle no
+  (unless (or (featurep 'any-backend)
+              (require 'any-backend nil 'noerror))
+    (user-error "Evaluate or install `any-backend.el' (after tangling?)"))
+  (ab-org-babel-file-as-block-body filename)
+#+end_src
+
+#+caption[Minimal dot-emacs]:
+#+caption: Minimal dot-emacs.
+#+name: lst:insert-init-result
+#+RESULTS: lst:insert-init
+#+begin_src emacs-lisp -n :eval never :tangle no
+  ;; Almost everybody should edit the next line.
+  (push (expand-file-name "~/VCS/org-mode/lisp") load-path)
+  ;; Undo calling `org-ctags-enable'.
+  (defun org-ctags-disable ()
+    "Undo calling `org-ctags-enable'."
+    (put 'org-mode 'find-tag-default-function nil)
+    (setq org-ctags-enabled-p nil)
+    (setq org-open-link-functions nil))
+  (with-eval-after-load 'org-ctags
+    (org-ctags-disable))
+  ;; `tab'-related options affect `engrave-faces'.
+  (setopt tab-always-indent 'complete
+          tab-width 8
+          tool-bar-mode nil)
+  (when (eq system-type 'darwin)
+    (setopt ns-alternate-modifier nil
+            ns-command-modifier 'meta
+            ns-right-command-modifier 'super))
+  ;; Ensure to load all relevant `Org' libraries.
+  (dolist (lib '(org ob-core ob-latex org-src ox-latex))
+    (require lib))
+  ;; Setting `org-confirm-babel-evaluate' to `nil' is DANGEROUS.
+  (setopt org-adapt-indention nil
+  	org-confirm-babel-evaluate nil
+  	org-latex-compiler "lualatex"
+          org-latex-prefer-user-labels t
+          org-latex-src-block-backend 'engraved)
+  ;; Install a minimum of other packages:
+  ;; `engrave-faces' is absolutely necessary.
+  ;; `auctex' and `pdf-tools' are nice to have.
+  ;; First `pdf-tools' install may fail. FIX: exit Emacs to restart Emacs.
+  (setopt package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
+                             ("gnu-devel" . "https://elpa.gnu.org/devel/")
+  			   ("melpa" . "https://melpa.org/packages/")
+  			   ("nongnu" . "https://elpa.nongnu.org/nongnu/"))
+  	package-pinned-packages '((auctex . "gnu")
+  				  (engrave-faces . "gnu-devel")
+  				  (pdf-tools . "melpa")))
+  (dolist (pkg '(auctex engrave-faces pdf-tools))
+    (unless (package-installed-p pkg)
+      (package-install pkg)))
+  ;; `pdf-tools' has clickable links out of the box, contrary to `docview'.
+  ;; `pdf-loader-install' ensures compilation of the `epdfinfo.c' server.
+  (when (fboundp 'pdf-loader-install)
+    (pdf-loader-install))
+#+end_src
+
+* LaTeX preamble with page layout and float barriers
+:PROPERTIES:
+:CUSTOM_ID: sec:latex-preamble
+:END:
+
+The geometry in listing [[lst:latex-header]] makes that the line length in all
+listings fits within the LaTeX length ~\textwidth~.  Listing [[lst:latex-header]]
+also introduces float barriers to prevent floating figures and listings from
+floating outside their ~[sub-][sub-]sections~.
+
+#+caption[LaTeX preamble with page layout and float barriers]:
+#+caption: LaTeX preamble with page layout and float barriers.
+#+name: lst:latex-header
+#+begin_src latex -n :exports code
+  % BEGIN: lst:latex-header
+  \usepackage{biblatex} % LaTeX compilation fails without this package.
+  % PAGE LAYOUT: https://www.overleaf.com/learn/latex/Page_size_and_margins
+  \usepackage{geometry}
+  \usepackage{layout}
+  \geometry{
+    a4paper,
+    total={480pt,680pt},
+    top=60pt,
+    left=60pt,
+  }
+  % FLOAT BARRIERS:
+  % https://tex.stackexchange.com/questions/118662/use-placeins-for-subsections
+  % Make section an implicit float barrier:
+  \usepackage[section]{placeins}
+  % Make subsection an implicit float barrier:
+  \makeatletter
+  \AtBeginDocument{%
+    \expandafter\renewcommand\expandafter\subsection\expandafter{%
+      \expandafter\@fb@secFB\subsection
+    }%
+  }
+  \makeatother
+  % Make subsubsection an implicit float barrier:
+  \makeatletter
+  \AtBeginDocument{%
+    \expandafter\renewcommand\expandafter\subsubsection\expandafter{%
+      \expandafter\@fb@secFB\subsubsection
+    }%
+  }
+  % END: lst:latex-header
+#+end_src
+
+* Noweb templates
+:PROPERTIES:
+:CUSTOM_ID: sec:noweb-templates
+:END:
+
+Listing [[plain-engraved]], [[fixed-engraved]], [[boxed-engraved]], [[listings]], [[minted]], and
+[[verbatim]] are ~noweb~ templates for listing [[ab-do-it]] and [[ab-do-it-result]].
+
+#+caption: Noweb ~plain-engraved~ template.
+#+name: plain-engraved
+#+begin_src latex -n :exports code
+  % Backend (PLAIN) ENGRAVED requires no packages.
+#+end_src
+
+#+caption: Noweb ~fixed-engraved~ template.
+#+name: fixed-engraved
+#+begin_src latex -n :exports code
+  % Backend (FIXED) ENGRAVED requires no packages.
+#+end_src
+
+#+caption: Noweb ~boxed-engraved~ template.
+#+name: boxed-engraved
+#+begin_src latex -n :exports code
+  % Backend (BOXED) ENGRAVED requires no packages.
+#+end_src
+
+#+caption: Noweb ~listings~ template.
+#+name: listings
+#+begin_src latex -n :exports code
+  % Source block backend LISTINGS requires two packages.
+  \usepackage{listings}
+  \usepackage{color}
+#+end_src
+
+#+caption: Noweb ~minted~ template.
+#+name: minted
+#+begin_src latex -n :exports code
+  % Backend MINTED requires one package.
+  \usepackage{minted}
+#+end_src
+
+#+caption: Noweb ~verbatim~ template.
+#+name: verbatim
+#+begin_src latex -n :exports code
+  % Backend VERBATIM requires no packages.
+#+end_src
+
+* Switch backend and explore an ~engraved~ export backend bug
+:PROPERTIES:
+:CUSTOM_ID: sec:switch-and-explore
+:END:
+
+Listing [[ab-header]], [[ab-file-as-body]], [[ab-filter]], [[ab-org-setup]], [[ab-setup]], and
+[[defun-ab-do-it]], and [[ab-footer]] tangle into [[./any-backend.el]].
+
+#+caption: Library file header.
+#+name: ab-header
+#+begin_src emacs-lisp -n :eval never
+  ;;; any-backend.el --- demonstrate any block backend -*- lexical-binding:t -*-
+
+  ;; Author: Gerard Vermeulen <gerard.vermeulen@posteo.net>
+  ;; Version: 0.0.1
+
+  ;; This program is distributed in the hope that it will be useful,
+  ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ;; GNU General Public License for more details.
+
+  ;; You should have received a copy of the GNU General Public License
+  ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+  ;;; Commentary:
+
+  ;; This file is the tangled output of `any-backend.org' tailored for
+  ;; use with `any-backend.el'.  Users should go to the "Export to
+  ;; LaTeX" section of `any-backend.org' and execute the `ab-do-it'
+  ;; source block after evaluation or installation of `any-backend.el'.
+
+  ;;; Code:
+
+  (require 'ox-latex)
+#+end_src
+
+#+caption[Copy file contents to an indented source block body]:
+#+caption: Copy file contents to an indented source block body.
+#+name: ab-file-as-body
+#+begin_src emacs-lisp -n :results silent
+  (defun ab-org-babel-file-as-block-body (filename)
+    "Copy FILENAME contents to an indented Org Babel source block body."
+    (when (file-readable-p filename)
+      (let ((delete-trailing-whitespace t)
+  	  (n (if org-src-preserve-indentation
+  	         0 org-edit-src-content-indentation)))
+        (with-temp-buffer
+          (insert-file-contents filename)
+          (string-rectangle (point-min) (point-max)
+  		          (make-string n ?\s))
+          (delete-trailing-whitespace (point-min) (point-max))
+          (buffer-substring (point-min) (point-max))))))
+#+end_src
+
+#+caption[Define ~ab-org-latex-engrave-source-block-filter~]:
+#+caption: Define a source block filter function.
+#+name: ab-filter
+#+begin_src emacs-lisp -n :results silent
+  (defun ab-org-latex-engraved-source-block-filter (data _backend _info)
+    "Replace \"Code\" with \"Breakable\" in non-floating DATA environments.
+
+  Set `org-latex-engraved-preamble' to define a Breakable (non-floating)
+  environment and an unbreakable Code (floating) environment."
+    (unless (string-match "^\\\\DeclareTColorBox\\[\\]{Breakable}"
+                          org-latex-engraved-preamble)
+      (user-error
+       "`org-latex-engraved-preamble' defines no `Breakable' environment"))
+    (when (eq org-latex-src-block-backend 'engraved)
+      ;; Transform only blocks matching at position 0.  Therefore, do
+      ;; not transform blocks that are listing environments.
+      (when (string-match "\\`\\\\begin{Code}\n" data)
+        (setq data (replace-match "\\begin{Breakable}\n" t 'literal data))
+        (if (string-match "^\\\\end{Code}\n" data)
+            (setq data (replace-match "\\end{Breakable}\n" t 'literal data))
+          (error "Match `^\\\\end{Code}' failure")))))
+#+end_src
+
+#+caption[Define ~ab-org-latex-setup~.]:
+#+caption: Define ~ab-org-latex-setup~.
+#+name: ab-org-setup
+#+begin_src emacs-lisp -n :results silent
+  (defun ab-org-latex-setup (how main)
+    "Set `org-latex-src-block-backend' and `org-latex-toc-command'.
+  HOW selects the sub-backend and MAIN selects which Org features to use."
+    (cond
+     ((memq how '(minted plain-engraved fixed-engraved boxed-engraved))
+      (setq-local
+       org-latex-toc-command
+       "\\tableofcontents\\label{toc}\n\\listoflistings\n\\newpage\n"))
+     ((eq how 'listings)
+      (setq-local
+       org-latex-toc-command
+       "\\tableofcontents\\label{toc}\n\\lstlistoflistings\n\\newpage\n"))
+     ((eq how 'verbatim)
+      (setq-local
+       org-latex-toc-command
+       "\\tableofcontents\\label{toc}\n\\listoffigures\\newpage\n"))
+     (t (user-error "Correct argument `%S' for `ab-setup'" how)))
+    (if (memq how '(plain-engraved fixed-engraved boxed-engraved))
+        (setq-local org-latex-src-block-backend 'engraved)
+      (setq-local org-latex-src-block-backend how))
+    (if main (setq-local org-latex-packages-alist nil)
+      (setq-local org-latex-packages-alist
+                  (or (and (eq how 'minted) '(("" "minted")))
+                      (and (eq how 'listings) '(("" "listings")
+                                                ("" "color")))))))
+#+end_src
+
+#+caption[Define ~ab-setup~]:
+#+caption: Define ~ab-setup~.
+#+caption: *Line 41* depends on ~how~ being ~fixed-engraved~ or ~boxed-engraved~.
+#+name: ab-setup
+#+begin_src emacs-lisp -n :results silent
+  (defun ab-setup (how main)
+    "Set `org-latex-src-block-backend', `org-latex-toc-command',
+  `org-latex-engraved-preamble', and `org-export-filter-src-block-functions'.
+  HOW selects the sub-backend and MAIN selects which Org features to use."
+    (ab-org-latex-setup how main)
+    (if (memq how '(verbatim listings minted plain-engraved))
+        (progn (setq-local org-latex-engraved-preamble
+                           (default-toplevel-value 'org-latex-engraved-preamble))
+               (setq-local org-export-filter-src-block-functions nil))
+      (setq-local org-latex-engraved-preamble
+                  (format "\\usepackage{fvextra}
+  [FVEXTRA-SETUP]
+  %% Make code and line numbers normalsize. Make line numbers grey.
+  \\renewcommand\\theFancyVerbLine{
+    \\normalsize\\color{black!40!white}\\arabic{FancyVerbLine}}
+  %% Do not rely on an eventual call to `engrave-faces-latex-gen-preamble'.
+  \\usepackage{xcolor}
+  \\providecolor{EfD}{HTML}{f7f7f7}
+  \\providecolor{EFD}{HTML}{28292e}
+  %% Define a breakable Code environment to prettily wrap the fontified code.
+  \\usepackage[breakable,xparse]{tcolorbox}
+  \\DeclareTColorBox[]{Breakable}{o}{
+    colback=EfD, colframe=EFD, colupper=EFD,
+    fontupper=\\normalsize\\setlength{\\fboxsep}{0pt},
+    IfNoValueTF={#1}{
+      boxsep=2pt, arc=2.5pt, outer arc=2.5pt, boxrule=1.0pt
+    }{
+      boxsep=2.5pt, arc=0pt, outer arc=0pt, boxrule=0pt, leftrule=1.5pt
+    },
+    left=2pt, right=2pt, top=1pt, bottom=0.5pt, breakable
+  }
+  %% Define an unbreakable Code environment to fontify code inside floats.
+  \\DeclareTColorBox[]{Code}{o}{
+    colback=EfD, colframe=EFD, colupper=EFD,
+    fontupper=\\normalsize\\setlength{\\fboxsep}{0pt},
+    IfNoValueTF={#1}{
+      boxsep=2pt, arc=2.5pt, outer arc=2.5pt, boxrule=1.0pt
+    }{
+      boxsep=2.5pt, arc=0pt, outer arc=0pt, boxrule=0pt, leftrule=1pt
+    },
+    left=2pt, right=2pt, top=1pt, bottom=1pt, %s
+  }
+  [LISTINGS-SETUP]" (or (and (eq how 'fixed-engraved) "unbreakable")
+                        (and (eq how 'boxed-engraved) "breakable")
+                        (user-error "(ab-setup `%S') yells BOOM!" how))))
+      (setq-local org-export-filter-src-block-functions
+                  '(ab-org-latex-engraved-source-block-filter)))
+    org-latex-src-block-backend)
+#+end_src
+
+#+caption[Define ~ab-select-how-and-export-to-latex~]:
+#+caption: Define ~ab-select-how-and-export-to-latex~.
+#+name: defun-ab-do-it
+#+begin_src emacs-lisp -n :exports code :results silent
+  ;;;###autoload
+  (defun ab-select-how-and-export-to-latex (main)
+    "Export Org buffer to LaTeX file after prompting how to export.
+  In case MAIN is non-nil use org-9.7pre features, or in case MAIN is nil
+  use org-9.16 features, to export to LaTeX.
+
+  The `engraved' source block export backend may lead to defects in
+  compiled `pdf' for floating listings where vertical line spacing may not
+  be constant.  Option `plain-engraved' selects Org upstream, option
+  `fixed-engraved' selects a bug work-around, and option `boxed-engraved'
+  selects a bug amplification which may lead to terrible `pdf' output.
+  The other choices are `verbatim', `listings', and `minted' to select the
+  other backends."
+    (interactive)
+    (let ((how
+           (intern-soft
+            (completing-read
+             "How: " '(plain-engraved fixed-engraved boxed-engraved
+                                      verbatim listings minted)
+             nil t)))
+          (seconds 1))
+      (ab-setup how main)
+      (run-with-timer seconds nil #'org-latex-export-to-latex)
+      (if main
+          (format "#+latex_header: <<%s>>" how)
+        (format "%% %s" how))))
+#+end_src
+
+#+caption[Library file footer]:
+#+caption: Library file footer.
+#+name: ab-footer
+#+begin_src emacs-lisp -n :eval never
+  (provide 'any-backend)
+
+  ;;; any-backend.el ends here
+#+end_src
+
+* Export to LaTeX
+:PROPERTIES:
+:CUSTOM_ID: sec:any-backend-usage
+:END:
+
+Originally, I had written this document to explore ~noweb~, but that exposed a
+bug fixed since ~2024-02-05~.  Execution of the listing [[ab-do-it]] source block
+uses ~noweb~ in case of setting "~:var main='t~" in this source block and
+execution of the listing [[ab-do-it]] source block does not use ~noweb~ in case of
+setting "~:var main='nil~".  The latter setting has the effect of exporting the
+body of listing [[ab-do-it-result]].
+
+#+caption[Call ~ab-select-how-and-export-to-latex~]:
+#+caption: Call ~ab-select-how-and-export-to-latex~.
+#+name: ab-do-it
+#+header: :var main='nil
+#+header: :wrap "src latex -n :exports both :noweb yes :results raw"
+#+begin_src emacs-lisp -n :exports both :results raw :eval no-export :tangle no
+  (unless (or (featurep 'any-backend)
+              (require 'any-backend nil 'noerror))
+    (user-error "Evaluate or install `any-backend.el' (after tangling?)"))
+  (ab-select-how-and-export-to-latex main)
+#+end_src
+
+#+caption[Run ~ab-select-how-and-export-to-latex~ result]:
+#+caption: Run ~ab-select-how-and-export-to-latex~ result.
+#+name: ab-do-it-result
+#+RESULTS: ab-do-it
+#+begin_src latex -n :exports both :noweb yes :results raw
+% plain-engraved
+#+end_src
+
+#+RESULTS: ab-do-it-result
+#+latex_header: % Backend (PLAIN) ENGRAVED requires no packages.
+
+* Make never "broken" non-floating listing
+:PROPERTIES:
+:CUSTOM_ID: sec:make-non-floating-listing
+:END:
+
+#+caption[Insert ~any-backend.el~]:
+#+caption: Insert ~any-backend.el~.
+#+header: :wrap "src emacs-lisp -n :eval never :tangle no"
+#+name: insert-non-float
+#+header: :var filename="any-backend.el"
+#+begin_src emacs-lisp -n :eval no-export :exports both :tangle no
+  (unless (or (featurep 'any-backend)
+              (require 'any-backend nil 'noerror))
+    (user-error "Evaluate or install `any-backend.el' (after tangling?)"))
+  (ab-org-babel-file-as-block-body filename)
+#+end_src
+
+** List never "broken" non-floating listing
+:PROPERTIES:
+:CUSTOM_ID: sec:list-non-floating-listing
+:END:
+
+The next non-floating listing occupies a space of more than two pages.
+#+name: list-non-float-result
+#+RESULTS: insert-non-float
+#+begin_src emacs-lisp -n :eval never :tangle no
+  ;;; any-backend.el --- demonstrate any block backend -*- lexical-binding:t -*-
+
+  ;; Author: Gerard Vermeulen <gerard.vermeulen@posteo.net>
+  ;; Version: 0.0.1
+
+  ;; This program is distributed in the hope that it will be useful,
+  ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ;; GNU General Public License for more details.
+
+  ;; You should have received a copy of the GNU General Public License
+  ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+  ;;; Commentary:
+
+  ;; This file is the tangled output of `any-backend.org' tailored for
+  ;; use with `any-backend.el'.  Users should go to the "Export to
+  ;; LaTeX" section of `any-backend.org' and execute the `ab-do-it'
+  ;; source block after evaluation or installation of `any-backend.el'.
+
+  ;;; Code:
+
+  (require 'ox-latex)
+
+  (defun ab-org-babel-file-as-block-body (filename)
+    "Copy FILENAME contents to an indented Org Babel source block body."
+    (when (file-readable-p filename)
+      (let ((delete-trailing-whitespace t)
+  	  (n (if org-src-preserve-indentation
+  	         0 org-edit-src-content-indentation)))
+        (with-temp-buffer
+          (insert-file-contents filename)
+          (string-rectangle (point-min) (point-max)
+  		          (make-string n ?\s))
+          (delete-trailing-whitespace (point-min) (point-max))
+          (buffer-substring (point-min) (point-max))))))
+
+  (defun ab-org-latex-engraved-source-block-filter (data _backend _info)
+    "Replace \"Code\" with \"Breakable\" in non-floating DATA environments.
+
+  Set `org-latex-engraved-preamble' to define a Breakable (non-floating)
+  environment and an unbreakable Code (floating) environment."
+    (unless (string-match "^\\\\DeclareTColorBox\\[\\]{Breakable}"
+                          org-latex-engraved-preamble)
+      (user-error
+       "`org-latex-engraved-preamble' defines no `Breakable' environment"))
+    (when (eq org-latex-src-block-backend 'engraved)
+      ;; Transform only blocks matching at position 0.  Therefore, do
+      ;; not transform blocks that are listing environments.
+      (when (string-match "\\`\\\\begin{Code}\n" data)
+        (setq data (replace-match "\\begin{Breakable}\n" t 'literal data))
+        (if (string-match "^\\\\end{Code}\n" data)
+            (setq data (replace-match "\\end{Breakable}\n" t 'literal data))
+          (error "Match `^\\\\end{Code}' failure")))))
+
+  (defun ab-org-latex-setup (how main)
+    "Set `org-latex-src-block-backend' and `org-latex-toc-command'.
+  HOW selects the sub-backend and MAIN selects which Org features to use."
+    (cond
+     ((memq how '(minted plain-engraved fixed-engraved boxed-engraved))
+      (setq-local
+       org-latex-toc-command
+       "\\tableofcontents\\label{toc}\n\\listoflistings\n\\newpage\n"))
+     ((eq how 'listings)
+      (setq-local
+       org-latex-toc-command
+       "\\tableofcontents\\label{toc}\n\\lstlistoflistings\n\\newpage\n"))
+     ((eq how 'verbatim)
+      (setq-local
+       org-latex-toc-command
+       "\\tableofcontents\\label{toc}\n\\listoffigures\\newpage\n"))
+     (t (user-error "Correct argument `%S' for `ab-setup'" how)))
+    (if (memq how '(plain-engraved fixed-engraved boxed-engraved))
+        (setq-local org-latex-src-block-backend 'engraved)
+      (setq-local org-latex-src-block-backend how))
+    (if main (setq-local org-latex-packages-alist nil)
+      (setq-local org-latex-packages-alist
+                  (or (and (eq how 'minted) '(("" "minted")))
+                      (and (eq how 'listings) '(("" "listings")
+                                                ("" "color")))))))
+
+  (defun ab-setup (how main)
+    "Set `org-latex-src-block-backend', `org-latex-toc-command',
+  `org-latex-engraved-preamble', and `org-export-filter-src-block-functions'.
+  HOW selects the sub-backend and MAIN selects which Org features to use."
+    (ab-org-latex-setup how main)
+    (if (memq how '(verbatim listings minted plain-engraved))
+        (progn (setq-local org-latex-engraved-preamble
+                           (default-toplevel-value 'org-latex-engraved-preamble))
+               (setq-local org-export-filter-src-block-functions nil))
+      (setq-local org-latex-engraved-preamble
+                  (format "\\usepackage{fvextra}
+  [FVEXTRA-SETUP]
+  %% Make code and line numbers normalsize. Make line numbers grey.
+  \\renewcommand\\theFancyVerbLine{
+    \\normalsize\\color{black!40!white}\\arabic{FancyVerbLine}}
+  %% Do not rely on an eventual call to `engrave-faces-latex-gen-preamble'.
+  \\usepackage{xcolor}
+  \\providecolor{EfD}{HTML}{f7f7f7}
+  \\providecolor{EFD}{HTML}{28292e}
+  %% Define a breakable Code environment to prettily wrap the fontified code.
+  \\usepackage[breakable,xparse]{tcolorbox}
+  \\DeclareTColorBox[]{Breakable}{o}{
+    colback=EfD, colframe=EFD, colupper=EFD,
+    fontupper=\\normalsize\\setlength{\\fboxsep}{0pt},
+    IfNoValueTF={#1}{
+      boxsep=2pt, arc=2.5pt, outer arc=2.5pt, boxrule=1.0pt
+    }{
+      boxsep=2.5pt, arc=0pt, outer arc=0pt, boxrule=0pt, leftrule=1.5pt
+    },
+    left=2pt, right=2pt, top=1pt, bottom=0.5pt, breakable
+  }
+  %% Define an unbreakable Code environment to fontify code inside floats.
+  \\DeclareTColorBox[]{Code}{o}{
+    colback=EfD, colframe=EFD, colupper=EFD,
+    fontupper=\\normalsize\\setlength{\\fboxsep}{0pt},
+    IfNoValueTF={#1}{
+      boxsep=2pt, arc=2.5pt, outer arc=2.5pt, boxrule=1.0pt
+    }{
+      boxsep=2.5pt, arc=0pt, outer arc=0pt, boxrule=0pt, leftrule=1pt
+    },
+    left=2pt, right=2pt, top=1pt, bottom=1pt, %s
+  }
+  [LISTINGS-SETUP]" (or (and (eq how 'fixed-engraved) "unbreakable")
+                        (and (eq how 'boxed-engraved) "breakable")
+                        (user-error "(ab-setup `%S') yells BOOM!" how))))
+      (setq-local org-export-filter-src-block-functions
+                  '(ab-org-latex-engraved-source-block-filter)))
+    org-latex-src-block-backend)
+
+  ;;;###autoload
+  (defun ab-select-how-and-export-to-latex (main)
+    "Export Org buffer to LaTeX file after prompting how to export.
+  In case MAIN is non-nil use org-9.7pre features, or in case MAIN is nil
+  use org-9.16 features, to export to LaTeX.
+
+  The `engraved' source block export backend may lead to defects in
+  compiled `pdf' for floating listings where vertical line spacing may not
+  be constant.  Option `plain-engraved' selects Org upstream, option
+  `fixed-engraved' selects a bug work-around, and option `boxed-engraved'
+  selects a bug amplification which may lead to terrible `pdf' output.
+  The other choices are `verbatim', `listings', and `minted' to select the
+  other backends."
+    (interactive)
+    (let ((how
+           (intern-soft
+            (completing-read
+             "How: " '(plain-engraved fixed-engraved boxed-engraved
+                                      verbatim listings minted)
+             nil t)))
+          (seconds 1))
+      (ab-setup how main)
+      (run-with-timer seconds nil #'org-latex-export-to-latex)
+      (if main
+          (format "#+latex_header: <<%s>>" how)
+        (format "%% %s" how))))
+
+  (provide 'any-backend)
+
+  ;;; any-backend.el ends here
+#+end_src
+The previous non-floating listing occupies a space of more than two pages.
+
+* Conclusion: summary of constraints and limitations
+:PROPERTIES:
+:CUSTOM_ID: sec:conclusion
+:END:
+
+1. Placement of floating listings:
+   - It is impossible to have more than three floating listings on a page,
+     neither with ~minted~ nor with ~engraved~.
+   - Float barriers help to control the placement of floating listing.
+   - Mixing floating and non-floating listings in the same ~[sub-][sub-]section~
+     gives visually weird results: floating listings may float between the parts
+     of non-floating listings.
+2. Table of contents:
+   - the ~verbatim~ backend produces a "List of Figures" instead of a "List of
+     Listings".
+3. Sub-backend ~plain-engraved~ moving target defects:
+   - Listing [[plain-engraved]] is in a botched state.
+   - Listing [[ab-filter]] shows too much vertical spacing after line 13.
+   - Listing [[ab-org-setup]] shows too much vertical spacing after line 13.
+   - Listing [[ab-setup]] shows too much vertical spacing after line 13, 26, and 39.
+   - Listing [[defun-ab-do-it]] shows too much vertical spacing after line 13.
+4. Sub-backend ~boxed-engraved~ moving target defects:
+   - Listing [[ab-org-setup]] shows too much vertical spacing after line 19.
+   - Listing [[ab-setup]] shows too much vertical spacing after line 19, and 38.
+   - Listing [[defun-ab-do-it]] shows too much vertical spacing after line 19.
+*Fixing ~engraved~ requires:*
+1. ~unbreakable~ floating listings.
+2. ~\normalsize~ font size.
+3. visible boxes.
+Points (2) and (3) are unacceptable, IMO.
+
+# Emacs looks for "Local variables:" after the last "newline-formfeed".
+
+# Local Variables:
+# compile-command: "latexmk -interaction=nonstopmode -lualatex -pvc -shell-escape any-backend.tex"
+# fill-column: 80
+# org-edit-src-content-indentation: 2
+# End:

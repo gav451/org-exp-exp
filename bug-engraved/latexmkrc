@@ -1,0 +1,21 @@
+# pdf creator
+$pdf_mode = 4;  # 4 means lualatex
+# pdf previewer and update pdf previewer
+$pdf_previewer = "emacsclient -e '(find-file-other-window %S)'";
+$pdf_update_method = 4;  # 4 runs $pdf_update_command to force the update
+$pdf_update_command = "emacsclient -e '(with-current-buffer (find-buffer-visiting %S) (pdf-view-revert-buffer nil t))'";
+# see for instance glossary.latexmkrc
+add_cus_dep( 'acn', 'acr', 0, 'makeglossaries' );
+add_cus_dep( 'glo', 'gls', 0, 'makeglossaries' );
+# use ".=" to append to $clean_ext
+$clean_ext .= " acr acn alg bbl dvi glo gls glg ist lol lst";
+$clean_ext .= " nav run.xml snm synctex.gz";
+sub makeglossaries {
+    my ($name, $path) = fileparse( $$Psource );
+    return system "makeglossaries -d '$path' '$name'";
+}
+# Emacs looks for "Local variables:" after the last "newline-formfeed".
+
+# Local Variables:
+# mode: perl
+# End:

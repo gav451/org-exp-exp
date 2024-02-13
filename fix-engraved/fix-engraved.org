@@ -1,0 +1,486 @@
+#+title: Fix engraved
+#+author: Gerard Vermeulen
+#+latex_class: article
+#+latex_class_options: [11pt,a4paper,english,svgnames]
+#+options: ^:{} date:nil toc:2 timestamp:nil
+#+startup: showeverything
+#+property: header-args:emacs-lisp :tangle fix-engraved.el
+#+begin_src latex :noweb yes :results raw
+  ,#+latex_header: <<lst:latex-header>>
+#+end_src
+
+* Introduction
+:PROPERTIES:
+:CUSTOM_ID: sec:introduction
+:END:
+
+The ~pdf~ output of the ~engraved~ Org LaTeX source block backend shows elusive
+bugs in floating listings, see section [[#sec:defects-summary]] for lists of defects
+in the ~pdf~ output of this document which presents a possible fix.  Toggling
+the presence of a list of listings in the table of contents (see listing
+[[fe-toggle-toc]]) may make a lot of difference in the location of the defects.
+Therefore, I call them moving target defects and I think their location may be
+system or Emacs environment dependent.  The entry source block to the code in
+this document is listing [[fe-do-it]].
+
+Execution of the entry point listing [[fe-do-it]] assumes tangling of this file to
+[[./fix-engraved.el]] and evaluation of [[./fix-engraved.el]] or installation of
+[[./fix-engraved.el]] by means of ~package-install-from-buffer~.
+
+
+* Engraved fix idea: declare ~IfBooleanTF~ Code color boxes
+:PROPERTIES:
+:CUSTOM_ID: sec:idea
+:END:
+
+In my experience, the most concise solution to fix the bug outside ~Org~ is:
+- Let the ~engraved~ backend produce only unbreakable ~Code~ environments.
+- Filter exposed ~Code~ environments to make those breakable.
+Listing [[tcolorbox-manual]] modifies a [[https://texdoc.org/serve/tcolorbox.pdf/0][Manual for the tcolorbox package]] example.
+Such switching between ~breakable~ and ~unbreakable~ color boxes allows to code
+the most simple source block filter function in order to change ~\begin{Code}~
+to ~\begin{Code}*~ where appropriate.  See listing [[fe-filter]] for the code.
+
+#+caption[Exploit the boolean example in the ~tcolorbox~ manual]:
+#+caption: Exploit the boolean example in the ~tcolorbox~ manual.
+#+name: tcolorbox-manual
+#+begin_src latex -n :exports never
+  \documentclass[11pt,a4paper,svgnames]{article}
+  \usepackage{xcolor}
+  \usepackage[breakable,xparse]{tcolorbox}
+  \title{Engraved fix idea: declare boolean Code color boxes}
+  \author{Gerard Vermeulen}
+  \date{}
+  % Use {s} to stick to the boolean example in the tcolorbox manual.
+  \DeclareTColorBox{Code}{s}{
+    IfBooleanTF={#1}{
+      colframe=red!75!black, breakable}{
+      colframe=green!75!black, unbreakable}}
+  \begin{document}
+  \maketitle
+  Filtering policy:
+  \begin{enumerate}
+  \item
+    Let Engraved produce only unbreakable Code environments.
+  \item
+    Filter exposed Code environments to make those breakable.
+  \end{enumerate}
+  \begin{Code}
+    Unbreakable Code has a GREEN frame.
+  \end{Code}
+  \begin{Code}*
+    Breakable Code has a RED frame.
+  \end{Code}
+  \end{document}
+#+end_src
+
+* LaTeX preamble with page layout and float barriers
+:PROPERTIES:
+:CUSTOM_ID: sec:latex-preamble
+:END:
+
+The geometry in listing [[lst:latex-header]] makes that the line length of all
+listings fits within the LaTeX length ~\textwidth~.  Listing [[lst:latex-header]]
+also introduces float barriers to prevent floating figures and listings from
+floating outside their ~[sub-][sub-]sections~.  This document may show that
+LaTeX fails to place more than three floating listings on a page, even though
+space allows it.
+
+#+caption[LaTeX preamble with page layout and float barriers]:
+#+caption: LaTeX preamble with page layout and float barriers.
+#+name: lst:latex-header
+#+begin_src latex -n :exports code
+  % BEGIN: lst:latex-header
+  \usepackage{biblatex} % LaTeX compilation fails without this package.
+  % PAGE LAYOUT: https://www.overleaf.com/learn/latex/Page_size_and_margins
+  \usepackage{geometry}
+  \usepackage{layout}
+  \geometry{
+    a4paper,
+    total={480pt,680pt},
+    top=60pt,
+    left=60pt,
+  }
+  % FLOAT BARRIERS:
+  % https://tex.stackexchange.com/questions/118662/use-placeins-for-subsections
+  % Make section an implicit float barrier:
+  \usepackage[section]{placeins}
+  % Make subsection an implicit float barrier:
+  \makeatletter
+  \AtBeginDocument{%
+    \expandafter\renewcommand\expandafter\subsection\expandafter{%
+      \expandafter\@fb@secFB\subsection
+    }%
+  }
+  \makeatother
+  % Make subsubsection an implicit float barrier:
+  \makeatletter
+  \AtBeginDocument{%
+    \expandafter\renewcommand\expandafter\subsubsection\expandafter{%
+      \expandafter\@fb@secFB\subsubsection
+    }%
+  }
+  % END: lst:latex-header
+#+end_src
+
+* Source blocks with code for ~fix-engraved~
+:PROPERTIES:
+:CUSTOM_ID: sec:fix-engraved-code
+:END:
+
+#+caption: Library file header.
+#+name: fe-header
+#+begin_src emacs-lisp -n :eval never
+  ;;; fix-engraved.el --- fix engraved bug -*- lexical-binding:t -*-
+
+  ;; Author: Gerard Vermeulen <gerard.vermeulen@posteo.net>
+  ;; Version: 0.0.1
+
+  ;; This program is free software; you can redistribute it and/or modify
+  ;; it under the terms of the GNU General Public License as published by
+  ;; the Free Software Foundation, either version 3 of the License, or
+  ;; (at your option) any later version.
+
+  ;; This program is distributed in the hope that it will be useful,
+  ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ;; GNU General Public License for more details.
+
+  ;; You should have received a copy of the GNU General Public License
+  ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+  ;;; Commentary:
+
+  ;; This file is the tangled output of `fix-engraved.org' tailored for
+  ;; use with `fix-engraved.el' which users can evaluate.  Otherwise,
+  ;; users can go to the "Export to LaTeX" section of `fix-engraved.org'
+  ;; and execute the `fe-do-it' source block after installation of
+  ;; `fix-engraved.el'.
+
+  ;;; Code:
+
+  (require 'ox-latex)
+#+end_src
+
+#+caption[Copy file contents to an indented source block body]:
+#+caption: Copy file contents to an indented source block body.
+#+name: fe-file-as-body
+#+begin_src emacs-lisp -n :results silent
+  (defun fe-org-babel-file-as-block-body (filename)
+    "Copy FILENAME contents to an indented Org Babel source block body."
+    (when (file-readable-p filename)
+      (let ((delete-trailing-whitespace t)
+  	  (n (if org-src-preserve-indentation
+  	         0 org-edit-src-content-indentation)))
+        (with-temp-buffer
+          (insert-file-contents filename)
+          (string-rectangle (point-min) (point-max)
+  		          (make-string n ?\s))
+          (delete-trailing-whitespace (point-min) (point-max))
+          (buffer-substring (point-min) (point-max))))))
+#+end_src
+
+#+caption[Toggle ~org-latex-toc-command~]:
+#+caption: Toggle ~org-latex-toc-command~
+#+caption: between toplevel and file local values.
+#+name: fe-toggle-toc
+#+begin_src emacs-lisp -n :results silent
+  (defun fe-toggle-toc ()
+    "Toggle `org-latex-toc-command' between toplevel and file local values."
+    (interactive)
+    (if (eq org-latex-toc-command
+            (default-toplevel-value 'org-latex-toc-command))
+        (progn
+          (save-buffer)
+          (revert-buffer nil 'noconfirm)
+          (message "Now `org-latex-toc-command' has its file local value"))
+      (setq-local org-latex-toc-command
+                  (default-toplevel-value 'org-latex-toc-command))
+      (message "Now `org-latex-toc-command' has its toplevel value")))
+#+end_src
+
+#+caption[Define ~fe-org-latex-engrave-source-block-filter~]:
+#+caption: Define a source block filter function.
+#+name: fe-filter
+#+begin_src emacs-lisp -n :results silent
+  (defun fe-org-latex-engraved-source-block-filter (data _backend _info)
+    "Convert unbreakable \"Code\" environments to breakable in non-floats.
+
+  Set `org-latex-engraved-preamble' to define an IfBooleanTF Code environment."
+    (unless (string-match "^\\\\DeclareTColorBox\\[\\]{Code}{s}"
+                          org-latex-engraved-preamble)
+      (user-error
+       "`org-latex-engraved-preamble' defines no `IfBooleanTF' environment"))
+    (when (eq org-latex-src-block-backend 'engraved)
+      ;; Transform only blocks matching at position 0.  Therefore, do
+      ;; not transform blocks that are listing environments.
+      (when (and (string-match "\\`\\\\begin{Code}\n" data))
+        (setq data (replace-match "\\begin{Code}*\n" t 'literal data)))))
+#+end_src
+
+#+caption[Define advice to install the ~fix-engraved~ bug work-around]:
+#+caption: Define advice to install the ~fix-engraved~ bug work-around.
+#+name: fe-advice
+#+begin_src emacs-lisp -n :results silent
+  (defun fe-advice (&rest _args)
+    "Install the `fix-engraved' bug work-around."
+    (when (eq org-latex-src-block-backend 'engraved)
+      ;; I prefer bigger fonts and boxes.  This is not essential.
+      (setq-local org-latex-engraved-preamble
+                  "\\usepackage{fvextra}
+  [FVEXTRA-SETUP]
+  % Make code and line numbers normalsize. Make line numbers grey.
+  \\renewcommand\\theFancyVerbLine{
+    \\normalsize\\color{black!40!white}\\arabic{FancyVerbLine}}
+  % Do not rely on an eventual call to `engrave-faces-latex-gen-preamble'.
+  \\usepackage{xcolor}
+  \\providecolor{EfD}{HTML}{f7f7f7}
+  \\providecolor{EFD}{HTML}{28292e}
+  % Define a breakable Code environment to prettily wrap the fontified code.
+  \\usepackage[breakable,xparse]{tcolorbox}
+  \\DeclareTColorBox[]{Code}{s}{
+    colback=EfD, colframe=EFD, colupper=EFD,
+    fontupper=\\normalsize\\setlength{\\fboxsep}{0pt},
+    boxsep=1.0pt, arc=1.0pt, outer arc=1.0pt, boxrule=0.5pt,
+    IfBooleanTF={#1}{breakable}{unbreakable},
+    left=2.0pt, right=2.0pt, top=1.0pt, bottom=1.0pt
+  }
+  [LISTINGS-SETUP]")
+      (setq-local org-export-filter-src-block-functions
+                  '(fe-org-latex-engraved-source-block-filter))))
+#+end_src
+
+#+caption[Define advice usage]:
+#+caption: Define advice usage.
+#+name: fe-use-advice
+#+begin_src emacs-lisp -n :results none
+  ;;;###autoload
+  (defun fe-enable ()
+    "Enable an `engraved' bug work-around."
+    (interactive)
+    (if (not (derived-mode-p 'org-mode))
+        (user-error "Don't call `fe-enable' outside `org-mode' buffers")
+      (advice-add 'org-export-dispatch :before 'fe-advice)
+      (message "Enabled an `engraved' bug work-around")))
+
+  ;;;###autoload
+  (defun fe-disable ()
+    "Disable an `engraved' bug work-around."
+    (interactive)
+    (if (not (derived-mode-p 'org-mode))
+        (user-error "Don't call `fe-disable' outside `org-mode' buffers")
+      (setq-local org-latex-engraved-preamble
+                  (default-toplevel-value 'org-latex-engraved-preamble))
+      (setq-local org-export-filter-src-block-functions nil)
+      (advice-remove 'org-export-dispatch 'fe-advice)
+      (message "Disabled an `engraved' bug work-around")))
+
+  (when (derived-mode-p 'org-mode)
+    (fe-enable))
+#+end_src
+
+#+caption[Library file footer]:
+#+caption: Library file footer.
+#+name: fe-footer
+#+begin_src emacs-lisp -n :eval never
+  (provide 'fix-engraved)
+
+  ;;; fix-engraved.el ends here
+#+end_src
+
+* Export to LaTeX
+:PROPERTIES:
+:CUSTOM_ID: sec:export-to-latex
+:END:
+
+#+caption[Work around the ~engraved~ bug]:
+#+caption: Work around the ~engraved~ bug.
+#+header: :wrap "src emacs-lisp -n :eval never"
+#+name: fe-do-it
+#+begin_src emacs-lisp -n :exports code :results none :tangle no
+  (unless (or (featurep 'fix-engraved)
+              (require 'fix-engraved nil 'noerror))
+    (user-error "Evaluate or install `fix-engraved.el' (after tangling?)"))
+#+end_src
+
+* Make never "broken" non-floating listing
+:PROPERTIES:
+:CUSTOM_ID: sec:make-non-floating-listing
+:END:
+
+#+caption[Insert ~fix-engraved.el~]:
+#+caption: Insert ~fix-engraved.el~.
+#+header: :wrap "src emacs-lisp -n :eval never :tangle no"
+#+name: insert-non-float
+#+header: :var filename="fix-engraved.el"
+#+begin_src emacs-lisp -n :eval no-export :exports both :tangle no
+  (unless (or (featurep 'fix-engraved)
+              (require 'fix-engraved nil 'noerror))
+    (user-error "Evaluate or install `fix-engraved.el' (after tangling?)"))
+  (fe-org-babel-file-as-block-body filename)
+#+end_src
+
+** List never "broken" non-floating listing
+:PROPERTIES:
+:CUSTOM_ID: sec:list-non-floating-listing
+:END:
+
+#+RESULTS: insert-non-float
+#+begin_src emacs-lisp -n :eval never :tangle no
+  ;;; fix-engraved.el --- fix engraved bug -*- lexical-binding:t -*-
+
+  ;; Author: Gerard Vermeulen <gerard.vermeulen@posteo.net>
+  ;; Version: 0.0.1
+
+  ;; This program is free software; you can redistribute it and/or modify
+  ;; it under the terms of the GNU General Public License as published by
+  ;; the Free Software Foundation, either version 3 of the License, or
+  ;; (at your option) any later version.
+
+  ;; This program is distributed in the hope that it will be useful,
+  ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ;; GNU General Public License for more details.
+
+  ;; You should have received a copy of the GNU General Public License
+  ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+  ;;; Commentary:
+
+  ;; This file is the tangled output of `fix-engraved.org' tailored for
+  ;; use with `fix-engraved.el' which users can evaluate.  Otherwise,
+  ;; users can go to the "Export to LaTeX" section of `fix-engraved.org'
+  ;; and execute the `fe-do-it' source block after installation of
+  ;; `fix-engraved.el'.
+
+  ;;; Code:
+
+  (require 'ox-latex)
+
+  (defun fe-org-babel-file-as-block-body (filename)
+    "Copy FILENAME contents to an indented Org Babel source block body."
+    (when (file-readable-p filename)
+      (let ((delete-trailing-whitespace t)
+  	  (n (if org-src-preserve-indentation
+  	         0 org-edit-src-content-indentation)))
+        (with-temp-buffer
+          (insert-file-contents filename)
+          (string-rectangle (point-min) (point-max)
+  		          (make-string n ?\s))
+          (delete-trailing-whitespace (point-min) (point-max))
+          (buffer-substring (point-min) (point-max))))))
+
+  (defun fe-toggle-toc ()
+    "Toggle `org-latex-toc-command' between toplevel and file local values."
+    (interactive)
+    (if (eq org-latex-toc-command
+            (default-toplevel-value 'org-latex-toc-command))
+        (progn
+          (save-buffer)
+          (revert-buffer nil 'noconfirm)
+          (message "Now `org-latex-toc-command' has its file local value"))
+      (setq-local org-latex-toc-command
+                  (default-toplevel-value 'org-latex-toc-command))
+      (message "Now `org-latex-toc-command' has its toplevel value")))
+
+  (defun fe-org-latex-engraved-source-block-filter (data _backend _info)
+    "Convert unbreakable \"Code\" environments to breakable in non-floats.
+
+  Set `org-latex-engraved-preamble' to define an IfBooleanTF Code environment."
+    (unless (string-match "^\\\\DeclareTColorBox\\[\\]{Code}{s}"
+                          org-latex-engraved-preamble)
+      (user-error
+       "`org-latex-engraved-preamble' defines no `IfBooleanTF' environment"))
+    (when (eq org-latex-src-block-backend 'engraved)
+      ;; Transform only blocks matching at position 0.  Therefore, do
+      ;; not transform blocks that are listing environments.
+      (when (and (string-match "\\`\\\\begin{Code}\n" data))
+        (setq data (replace-match "\\begin{Code}*\n" t 'literal data)))))
+
+  (defun fe-advice (&rest _args)
+    "Install the `fix-engraved' bug work-around."
+    (when (eq org-latex-src-block-backend 'engraved)
+      ;; I prefer bigger fonts and boxes.  This is not essential.
+      (setq-local org-latex-engraved-preamble
+                  "\\usepackage{fvextra}
+  [FVEXTRA-SETUP]
+  % Make code and line numbers normalsize. Make line numbers grey.
+  \\renewcommand\\theFancyVerbLine{
+    \\normalsize\\color{black!40!white}\\arabic{FancyVerbLine}}
+  % Do not rely on an eventual call to `engrave-faces-latex-gen-preamble'.
+  \\usepackage{xcolor}
+  \\providecolor{EfD}{HTML}{f7f7f7}
+  \\providecolor{EFD}{HTML}{28292e}
+  % Define a breakable Code environment to prettily wrap the fontified code.
+  \\usepackage[breakable,xparse]{tcolorbox}
+  \\DeclareTColorBox[]{Code}{s}{
+    colback=EfD, colframe=EFD, colupper=EFD,
+    fontupper=\\normalsize\\setlength{\\fboxsep}{0pt},
+    boxsep=1.0pt, arc=1.0pt, outer arc=1.0pt, boxrule=0.5pt,
+    IfBooleanTF={#1}{breakable}{unbreakable},
+    left=2.0pt, right=2.0pt, top=1.0pt, bottom=1.0pt
+  }
+  [LISTINGS-SETUP]")
+      (setq-local org-export-filter-src-block-functions
+                  '(fe-org-latex-engraved-source-block-filter))))
+
+  ;;;###autoload
+  (defun fe-enable ()
+    "Enable an `engraved' bug work-around."
+    (interactive)
+    (if (not (derived-mode-p 'org-mode))
+        (user-error "Don't call `fe-enable' outside `org-mode' buffers")
+      (advice-add 'org-export-dispatch :before 'fe-advice)
+      (message "Enabled an `engraved' bug work-around")))
+
+  ;;;###autoload
+  (defun fe-disable ()
+    "Disable an `engraved' bug work-around."
+    (interactive)
+    (if (not (derived-mode-p 'org-mode))
+        (user-error "Don't call `fe-disable' outside `org-mode' buffers")
+      (setq-local org-latex-engraved-preamble
+                  (default-toplevel-value 'org-latex-engraved-preamble))
+      (setq-local org-export-filter-src-block-functions nil)
+      (advice-remove 'org-export-dispatch 'fe-advice)
+      (message "Disabled an `engraved' bug work-around")))
+
+  (when (derived-mode-p 'org-mode)
+    (fe-enable))
+
+  (provide 'fix-engraved)
+
+  ;;; fix-engraved.el ends here
+#+end_src
+
+* Summary of defects
+:PROPERTIES:
+:CUSTOM_ID: sec:defects-summary
+:END:
+
+Without the "List of Listings" and without the ~engraved~ bug work-around (after
+calling ~fe-disable~) moving targets defects are:
+- Listing [[tcolorbox-manual]] shows too much vertical spacing after line 4, 8,
+  12, 16, 18, 20, and 24.
+- Listing [[fe-header]] shows too much vertical spacing after line 14, and 28.
+- Listing [[fe-advice]] shows too much vertical spacing after line 14.
+- Listing [[fe-use-advice]] shows too much vertical spacing after line 14.
+With the "List of Listings" and without the ~engraved~ bug work-around (after
+calling ~fe-disable~) moving targets defects are:
+- Listing [[fe-file-as-body]] shows too much vertical spacing after line 14, and 28.
+- Listing [[fe-advice]] shows too much vertical spacing after line 1'.
+- Listing [[fe-use-advice]] shows too much vertical spacing after line 14.
+Those defects disappear after calling ~fe-enable~. *Bad news* is that the fix
+requires:
+1. ~unbreakable~ floating listings.
+2. ~\normalsize~ font size.
+3. visible boxes.
+Points (2) and (3) are unacceptable, IMO.
+
+# Local Variables:
+# compile-command: "latexmk -interaction=nonstopmode -lualatex -pvc fix-engraved.tex"
+# fill-column: 80
+# org-edit-src-content-indentation: 2
+# org-latex-src-block-backend: engraved
+# org-latex-toc-command: "\\tableofcontents\\label{toc}\n\\listoflistings\n\\newpage\n"
+# End:

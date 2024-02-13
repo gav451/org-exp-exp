@@ -1,0 +1,58 @@
+#+title: Org export experimentation
+#+author: Gerard Vermeulen
+
+* Introduction
+:PROPERTIES:
+:CUSTOM_ID: sec:introduction
+:END:
+
+The terms of the [[./fdl-1.3.txt][GNU FDL]] apply to the ~.org~ files in this repository
+and the terms of the [[./gpl-3.0.txt][GNU General Public License v3.0]] apply to the
+~.el~ files in this repository.
+
+* Any backend
+:PROPERTIES:
+:CUSTOM_ID: sec:any-backend
+:END:
+
+File [[./any-backend/any-backend.org][any-backend.org]] helps to compare the LaTeX output using different
+~org-latex-src-block-backend~ options.  It demonstrates also a bug in
+the ~engraved~ backend.  The mini-library [[./any-backend/any-backend.el][any-backend.el]] works in
+tandem with [[./any-backend/any-backend.org][any-backend.org]].  The source block [[./any-backend/any-backend.org::ab-do-it][ab-do-it]] is the entry
+point of [[./any-backend/any-backend.org][any-backend.org]].
+
+* Bug engraved
+:PROPERTIES:
+:CUSTOM_ID: sec:bug-engraved
+:END:
+
+File [[./bug-engraved/bug-engraved.org][bug-engraved.org]] helps to understand a bug in the ~engraved~ Org
+LaTeX source block export backend by comparing its output with the
+output of a work-around and the output of a bug amplifier.  The
+mini-library [[./bug-engraved/bug-engraved.el][bug-engraved.el]] works in tandem with [[./bug-engraved/bug-engraved.org][bug-engraved.org]].  The
+source block [[./bug-engraved/bug-engraved.org::be-do-it][be-do-it]] is the entry point of [[./bug-engraved/bug-engraved.org][bug-engraved.org]].
+
+* Fix engraved
+:PROPERTIES:
+:CUSTOM_ID: sec:fix-engraved
+:END:
+
+File [[./fix-engraved/fix-engraved.org][fix-engraved.org]] explains and implements my sofar most concise
+solution to work around a bug in the ~engraved~ Org LaTeX source block
+export backend.  It is the basis for an unacceptable patch fixing the
+bug.  The mini-library [[./fix-engraved/fix-engraved.el][fix-engraved.el]] works in tandem with
+[[./fix-engraved/fix-engraved.org][fix-engraved.org]].  The source block [[./fix-engraved/fix-engraved.org::fe-do-it][fe-do-it]] is the entry point of
+[[./fix-engraved/fix-engraved.org][fix-engraved.org]] and executing it enables a work-around for the
+engraved bug.  The user has to call ~org-export-dispatch~. Calling
+functions ~fe-disable~ or ~fe-enable~ disables or enables the work-around
+and calling ~fe-toggle-toc~ may make a layout difference by toggling
+the presence of a list of listings in the table of contents.
+
+* LaTeX shell-escape danger
+:PROPERTIES:
+:CUSTOM_ID: sec:latex-shell-escape-danger
+:END:
+
+File [[./latex-shell-escape-danger/latex-shell-escape-danger.org][latex-shell-escape-danger.org]] explains how to inject any command
+exploiting file local safe string variables in ~ox-latex~ and the
+LaTeX ~-shell-escape~ option.

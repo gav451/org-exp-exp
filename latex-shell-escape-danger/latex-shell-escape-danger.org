@@ -1,0 +1,53 @@
+#+title: LaTeX shell-escape malicious hacking dangers
+#+subtitle: ls -l
+#+author: Gerard Vermeulen
+#+options: date:nil timestamp:nil
+#+latex_header: \usepackage{minted}
+
+* Hacking
+:PROPERTIES:
+:CUSTOM_ID: sec:hacking
+:END:
+
+Test section [[#sec:hacking]] reference.
+See [[https://xkcd.com/1808][Hacking]].
+
+#+caption: Hacking.
+[[./hacking.png]]
+
+#+begin_quote
+Is replacing {quote} with {\ShellEscape{rm -v non-existing.*}} safe?
+#+end_quote
+
+Candidates to test one by one by moving them into the local variables
+comment block at the end of this file and calling ~(save-buffer 0)~
+and ~(revert-buffer nil 'noconfirm)~:
+
+#+caption: Safe file local string variable investigation.
+#+begin_src org
+# Unsafe candidates which are not safe upstream:
+# org-latex-toc-command: "\\ShellEscape{ls -l}\n\n"
+# org-latex-subtitle-format: "\\ShellEscape{%s}"
+# org-latex-image-default-width: "\\ShellEscape{ls -l}"
+
+# Candidates possibly declared safe upstream which are not safe:
+# org-latex-default-quote-environment: "\\ShellEscape{ls -l}"
+# org-latex-image-default-scale: "\\ShellEscape{ls -l}"
+# org-latex-default-figure-position: "\\ShellEscape{ls -l}"
+# org-latex-reference-command: "\\ShellEscape{ls -l} \\ref{%s}"
+#+end_src
+
+# Unsafe candidates which are not safe upstream:
+# org-latex-toc-command: "\\ShellEscape{ls -l}\n\n"
+# org-latex-subtitle-format: "\\ShellEscape{%s}"
+# org-latex-image-default-width: "\\ShellEscape{ls -l}"
+
+# Candidates possibly declared safe upstream which are not safe:
+# org-latex-default-quote-environment: "\\ShellEscape{ls -l}"
+# org-latex-image-default-scale: "\\ShellEscape{ls -l}"
+# org-latex-default-figure-position: "\\ShellEscape{ls -l}"
+# org-latex-reference-command: "\\ShellEscape{ls -l} \\ref{%s}"
+
+# Local Variables:
+# org-latex-src-block-backend: verbatim
+# End:

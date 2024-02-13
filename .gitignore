@@ -1,0 +1,19 @@
+# Directories:
+any-backend/_minted-any-backend
+
+# File suffixes:
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.elc
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lol
+*.lst
+*.out
+*.run.xml
+*.tex
+*.toc
