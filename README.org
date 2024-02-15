@@ -6,9 +6,8 @@
 :CUSTOM_ID: sec:introduction
 :END:
 
-The terms of the [[./fdl-1.3.txt][GNU FDL]] apply to the ~.org~ files in this repository
-and the terms of the [[./gpl-3.0.txt][GNU General Public License v3.0]] apply to the
-~.el~ files in this repository.
+The terms of the [[./LICENSE.txt][GNU General Public License v3.0]] apply to the ~.el~
+files in this repository.
 
 * Any backend
 :PROPERTIES:
